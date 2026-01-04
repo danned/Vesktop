@@ -158,14 +158,14 @@ async function startFfmpegAndMpv(codec: string) {
         return false;
     }
 
-    // Spawn ffmpeg with correct input format
+    // Spawn ffmpeg with correct input format - low latency settings
     ffmpegProcess = spawn("ffmpeg", [
-        "-y",
+        "-fflags", "nobuffer",
+        "-flags", "low_delay",
         "-f", inputFormat,
         "-i", videoFifo,
         "-c:v", "copy",
-        "-f", "matroska",
-        "-cluster_time_limit", "50",
+        "-f", "mpegts",
         "pipe:1"
     ], {
         stdio: ["ignore", "pipe", "pipe"]
@@ -183,14 +183,13 @@ async function startFfmpegAndMpv(codec: string) {
         console.log("[mpvStream] ffmpeg exited with code:", code);
     });
 
-    // Spawn mpv to play ffmpeg's output
+    // Spawn mpv to play ffmpeg's output - low latency settings
     mpvProcess = spawn("mpv", [
         "--no-terminal",
         "--force-window=immediate",
-        "--cache=yes",
-        "--cache-secs=2",
-        "--demuxer-max-bytes=50M",
-        "--demuxer-readahead-secs=2",
+        "--profile=low-latency",
+        "--cache=no",
+        "--demuxer-readahead-secs=0",
         "--title=Discord Stream",
         "-"
     ], {
