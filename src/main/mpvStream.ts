@@ -158,43 +158,68 @@ async function startFfmpegAndMpv(codec: string) {
         return false;
     }
 
-    // Spawn ffmpeg with correct input format - low latency settings
-    ffmpegProcess = spawn("ffmpeg", [
-        "-fflags", "nobuffer",
-        "-flags", "low_delay",
-        "-f", inputFormat,
-        "-i", videoFifo,
-        "-c:v", "copy",
-        "-f", "mpegts",
-        "pipe:1"
-    ], {
-        stdio: ["ignore", "pipe", "pipe"]
-    });
+    // For H.264, pipe directly to mpv (no ffmpeg needed)
+    // For VP8/VP9, we still need ffmpeg to demux IVF
+    if (codec === "h264") {
+        // Spawn mpv directly with raw H.264 input
+        mpvProcess = spawn("mpv", [
+            "--no-terminal",
+            "--force-window=immediate",
+            "--profile=low-latency",
+            "--cache=no",
+            "--demuxer-readahead-secs=0",
+            "--demuxer-lavf-format=h264",
+            "--untimed",
+            "--title=Discord Stream",
+            videoFifo
+        ], {
+            stdio: ["ignore", "inherit", "inherit"]
+        });
+    } else {
+        // VP8/VP9: need ffmpeg to convert IVF to something mpv can stream
+        ffmpegProcess = spawn("ffmpeg", [
+            "-fflags", "nobuffer",
+            "-flags", "low_delay",
+            "-f", inputFormat,
+            "-i", videoFifo,
+            "-c:v", "copy",
+            "-f", "nut",
+            "-flush_packets", "1",
+            "pipe:1"
+        ], {
+            stdio: ["ignore", "pipe", "pipe"]
+        });
 
-    ffmpegProcess.stderr?.on("data", (data: Buffer) => {
-        console.log("[ffmpeg]", data.toString());
-    });
+        ffmpegProcess.stderr?.on("data", (data: Buffer) => {
+            console.log("[ffmpeg]", data.toString());
+        });
 
-    ffmpegProcess.on("error", (err) => {
-        console.error("[mpvStream] ffmpeg error:", err);
-    });
+        ffmpegProcess.on("error", (err) => {
+            console.error("[mpvStream] ffmpeg error:", err);
+        });
 
-    ffmpegProcess.on("exit", (code) => {
-        console.log("[mpvStream] ffmpeg exited with code:", code);
-    });
+        ffmpegProcess.on("exit", (code) => {
+            console.log("[mpvStream] ffmpeg exited with code:", code);
+        });
 
-    // Spawn mpv to play ffmpeg's output - low latency settings
-    mpvProcess = spawn("mpv", [
-        "--no-terminal",
-        "--force-window=immediate",
-        "--profile=low-latency",
-        "--cache=no",
-        "--demuxer-readahead-secs=0",
-        "--title=Discord Stream",
-        "-"
-    ], {
-        stdio: ["pipe", "inherit", "inherit"]
-    });
+        // Spawn mpv to play ffmpeg's output
+        mpvProcess = spawn("mpv", [
+            "--no-terminal",
+            "--force-window=immediate",
+            "--profile=low-latency",
+            "--cache=no",
+            "--demuxer-readahead-secs=0",
+            "--title=Discord Stream",
+            "-"
+        ], {
+            stdio: ["pipe", "inherit", "inherit"]
+        });
+
+        // Pipe ffmpeg output to mpv input
+        if (ffmpegProcess.stdout && mpvProcess.stdin) {
+            ffmpegProcess.stdout.pipe(mpvProcess.stdin);
+        }
+    }
 
     mpvProcess.on("error", (err) => {
         console.error("[mpvStream] mpv error:", err);
@@ -204,11 +229,6 @@ async function startFfmpegAndMpv(codec: string) {
         console.log("[mpvStream] mpv exited with code:", code);
         cleanup();
     });
-
-    // Pipe ffmpeg output to mpv input
-    if (ffmpegProcess.stdout && mpvProcess.stdin) {
-        ffmpegProcess.stdout.pipe(mpvProcess.stdin);
-    }
 
     // Wait for ffmpeg to start, then open FIFO for writing
     await new Promise(resolve => setTimeout(resolve, 100));
