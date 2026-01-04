@@ -102,6 +102,15 @@ export const VesktopNative = {
         launchGpu: () => invoke<void>(IpcEvents.DEBUG_LAUNCH_GPU),
         launchWebrtcInternals: () => invoke<void>(IpcEvents.DEBUG_LAUNCH_WEBRTC_INTERNALS)
     },
+    /** only available on Linux. Opens Go Live streams in mpv. */
+    mpvStream: {
+        start: (codec: string) => invoke<{ ok: boolean; error?: string }>(IpcEvents.MPV_STREAM_START, codec),
+        sendVideoFrame: (data: Uint8Array, isKeyFrame: boolean, timestamp: number) =>
+            invoke<boolean>(IpcEvents.MPV_STREAM_VIDEO_FRAME, data, isKeyFrame, timestamp),
+        sendAudioFrame: (data: Uint8Array, timestamp: number) =>
+            invoke<boolean>(IpcEvents.MPV_STREAM_AUDIO_FRAME, data, timestamp),
+        stop: () => invoke<void>(IpcEvents.MPV_STREAM_STOP)
+    },
     commands: {
         onCommand(cb: (message: IpcMessage) => void) {
             ipcRenderer.on(IpcEvents.IPC_COMMAND, (_, message) => cb(message));

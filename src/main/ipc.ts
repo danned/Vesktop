@@ -4,7 +4,10 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-if (process.platform === "linux") import("./venmic");
+if (process.platform === "linux") {
+    import("./venmic");
+    import("./mpvStream");
+}
 
 import { execFile } from "child_process";
 import {
